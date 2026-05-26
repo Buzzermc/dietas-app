@@ -286,7 +286,8 @@ async function renderDia() {
       const divider  = idx > 0 ? `<div class="dish-divider"></div>` : '';
       const ingList  = ingMap[item.receta_id] || [];
       const ingHtml  = ingList.length ? `<div class="block-ing"><span class="block-label label-ing">Ingredientes</span>${ingList.map(i=>`<div class="ing-row"><span>${i.replace(/^[\d.]+[a-z]+\s*/,'')}</span><span class="ing-qty">${i.match(/^[\d.]+[a-z]+/)?.[0]||''}</span></div>`).join('')}</div>` : '';
-      const pasos    = item.recetas.pasos || [];
+      const pasosRaw = item.recetas.pasos || [];
+      const pasos    = typeof pasosRaw === 'string' ? JSON.parse(pasosRaw) : pasosRaw;
       const recHtml  = pasos.length ? `<span class="block-label label-rec">Preparación</span><ol class="steps">${pasos.map(p=>`<li>${p}</li>`).join('')}</ol>` : '';
       return `${divider}<div class="dish">${nameHtml}${ingHtml}${recHtml}</div>`;
     }).join('');
@@ -381,7 +382,8 @@ async function renderCj() {
         return `<div class="ing-row"><span>${nombre}</span><span class="ing-qty" style="background:none;color:inherit;padding:0">${qhtml}</span></div>`;
       }).join('');
       const ingHtml = ingRows ? `<div class="block-ing"><span class="block-label label-ing">Ingredientes</span>${ingRows}</div>` : '';
-      const pasos = item.recetas.pasos || [];
+      const pasosRaw = item.recetas.pasos || [];
+      const pasos = typeof pasosRaw === 'string' ? JSON.parse(pasosRaw) : pasosRaw;
       const recHtml = pasos.length ? `<span class="block-label label-rec">Preparación</span><ol class="steps">${pasos.map(p=>`<li>${p}</li>`).join('')}</ol>` : '';
       return `${divider}<div class="dish">${nameHtml}${ingHtml}${recHtml}</div>`;
     }).join('');
