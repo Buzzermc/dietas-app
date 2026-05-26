@@ -185,19 +185,7 @@ let cjPlanId = null, cjDay = 'Lunes';
 let cPer = 'alba', cPlanId = null;
 const checksCache = {}; // ingrediente_id → comprado
 
-// ═══ INIT ═══
-async function init() {
-  planes = await sb('planes', 'select=id,nombre,orden&order=orden');
-  if (!planes.length) return;
-  diaPlanId = planes[0].id;
-  cjPlanId  = planes[0].id;
-  cPlanId   = planes[0].id;
-  buildPlanButtons();
-  setCompraPer('alba');
-  renderDia();
-  renderCj();
-  renderCompra();
-}
+
 
 // ═══ PLAN BUTTONS ═══
 function buildPlanButtons() {
@@ -222,9 +210,9 @@ function showTab(t) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
   ['dia','conjunto','compra'].forEach((n,i)=>{ if(n===t) document.querySelectorAll('.nav-tab')[i].classList.add('active'); });
-  if(t==='dia') renderDia();
+  if(t==='dia')      renderDia();
   if(t==='conjunto') renderCj();
-  if(t==='compra') renderCompra();
+  if(t==='compra')   renderCompra();
 }
 
 function toggle(id) {
@@ -479,9 +467,21 @@ async function renderCompra() {
     const idsA = [...new Set(rowsA.map(r=>r.receta_id))];
     const idsP = [...new Set(rowsP.map(r=>r.receta_id))];
 
+    // Fetch in chunks to avoid URL length limits
+    async function fetchIngs(userId, ids) {
+      let result = [];
+      for (let i = 0; i < ids.length; i += 20) {
+        const chunk = ids.slice(i, i+20);
+        const part = await sb('receta_ingredientes_usuario',
+          `select=cantidad,unidad,ingredientes(id,nombre,categoria)&usuario_id=eq.${userId}&receta_id=in.(${chunk.join(',')})&order=ingrediente_id&limit=1000`
+        );
+        result = result.concat(part);
+      }
+      return result;
+    }
     const [ingsA, ingsP] = await Promise.all([
-      sb('receta_ingredientes_usuario', `select=cantidad,unidad,ingredientes(id,nombre,categoria)&usuario_id=eq.2&receta_id=in.(${idsA.join(',')})&order=ingrediente_id`),
-      sb('receta_ingredientes_usuario', `select=cantidad,unidad,ingredientes(id,nombre,categoria)&usuario_id=eq.3&receta_id=in.(${idsP.join(',')})&order=ingrediente_id`)
+      fetchIngs(2, idsA),
+      fetchIngs(3, idsP)
     ]);
 
     // Aggregate by ingredient
@@ -530,11 +530,17 @@ async function renderCompra() {
     const userId = cPer === 'alba' ? 2 : 3;
     await loadChecks(cPlanId, null, userId);
 
-    const rows = await sb('plan_dias', `select=receta_id&plan_id=eq.${cPlanId}&usuario_id=eq.${userId}`);
+    const rows = await sb('plan_dias', `select=receta_id&plan_id=eq.${cPlanId}&usuario_id=eq.${userId}&limit=1000`);
     const ids = [...new Set(rows.map(r=>r.receta_id))];
-    const ings = await sb('receta_ingredientes_usuario',
-      `select=cantidad,unidad,ingredientes(id,nombre,categoria)&usuario_id=eq.${userId}&receta_id=in.(${ids.join(',')})&order=ingrediente_id`
-    );
+    // Fetch in chunks of 20 recipe IDs to avoid URL length limits
+    let ings = [];
+    for (let i = 0; i < ids.length; i += 20) {
+      const chunk = ids.slice(i, i+20);
+      const part = await sb('receta_ingredientes_usuario',
+        `select=cantidad,unidad,ingredientes(id,nombre,categoria)&usuario_id=eq.${userId}&receta_id=in.(${chunk.join(',')})&order=ingrediente_id&limit=1000`
+      );
+      ings = ings.concat(part);
+    }
 
     // Aggregate by ingredient
     const agg = {};
@@ -570,7 +576,26 @@ async function renderCompra() {
 }
 
 // ═══ ARRANQUE ═══
-init();
+// Planes hardcodeados para evitar el cold start en la primera carga
+// (coinciden con los IDs reales en Supabase)
+planes = [
+  {id:2, nombre:'Supervivencia', orden:1},
+  {id:3, nombre:'Bajo en potasio', orden:2},
+  {id:4, nombre:'Plan 3', orden:3},
+  {id:5, nombre:'Plan 4', orden:4}
+];
+diaPlanId = planes[0].id;
+cjPlanId  = planes[0].id;
+cPlanId   = planes[0].id;
+buildPlanButtons();
+setCompraPer('alba');
+renderDia(); // Solo carga la pestaña activa al arrancar
+
+// Ping Supabase en paralelo para despertar el proyecto (cold start tier gratuito ~1s)
+// Las llamadas reales de datos van después, cuando el usuario interactúa
+fetch(`${SB_URL}/rest/v1/planes?select=id&limit=1`, {
+  headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}` }
+}).catch(()=>{});
 </script>
 </body>
 </html>
